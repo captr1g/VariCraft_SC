@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-contract ArtMarketplace {
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-    address payable public owner;
+contract ArtMarketplace is ReentrancyGuard, Ownable {
     uint256 public platformFeePercentage;
     uint256 public totalFeesCollected; // Tracks total fees collected
     uint256 public lastFeeCollected;   // Tracks the last fee collected
@@ -11,48 +12,44 @@ contract ArtMarketplace {
     event PaymentProcessed(address indexed artist, address indexed buyer, uint256 amount, uint256 platformFee);
     event PlatformFeePercentageUpdated(uint256 newPercentage);
 
-    constructor(uint256 _platformFeePercentage) {
-        owner = payable(msg.sender);
-        platformFeePercentage = _platformFeePercentage;
+    constructor(uint256 _platformFeePercentage) Ownable(msg.sender) {
         require(_platformFeePercentage <= 100, "Platform fee cannot exceed 100%");
+        platformFeePercentage = _platformFeePercentage;
         totalFeesCollected = 0; // Initialize total fees
         lastFeeCollected = 0;   // Initialize last fee
     }
 
+    // Only the owner can set the platform fee percentage
     function setPlatformFeePercentage(uint256 _platformFeePercentage) public onlyOwner {
         require(_platformFeePercentage <= 100, "Platform fee cannot exceed 100%");
         platformFeePercentage = _platformFeePercentage;
         emit PlatformFeePercentageUpdated(_platformFeePercentage);
     }
 
-    function purchaseArt(address payable artist) public payable {
+    function purchaseArt(address payable artist) public payable nonReentrant {
         require(msg.value > 0, "Payment must be greater than zero.");
 
         uint256 platformFee = (msg.value * platformFeePercentage) / 100;
         uint256 artistPayment = msg.value - platformFee;
 
-        // Transfer funds
-        (bool successArtist, ) = artist.call{value: artistPayment}("");
-        require(successArtist, "Artist payment failed.");
-
-        (bool successOwner, ) = owner.call{value: platformFee}("");
-        require(successOwner, "Platform fee transfer failed.");
-
-        // Update fee tracking
+        // Update fee tracking before transferring funds
         totalFeesCollected += platformFee;
         lastFeeCollected = platformFee;
+
+        // Transfer funds
+        artist.transfer(artistPayment);
+        payable(owner()).transfer(platformFee);
 
         emit PaymentProcessed(artist, msg.sender, msg.value, platformFee);
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this function.");
-        _;
-    }
-
+    // Only the owner can withdraw funds
     function withdraw() public onlyOwner {
-        totalFeesCollected -= address(this).balance;
-        (bool success, ) = owner.call{value: address(this).balance}("");
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No funds to withdraw.");
+
+        totalFeesCollected -= balance; // Deduct from total fees collected
+        (bool success, ) = payable(owner()).call{value: balance}("");
         require(success, "Withdrawal failed.");
     }
 
