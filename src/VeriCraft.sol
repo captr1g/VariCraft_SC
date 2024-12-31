@@ -2,10 +2,18 @@
 pragma solidity 0.8.24;
 
 contract ArtistProfile {
+    error invalidInput();
+    error invalidUserName();
+    error invalidUser();
+    address owner;
+
+    constructor(address _owner){
+        if(_owner == address(0x0)) revert invalidInput();
+        owner = _owner;
+    }
     struct Artist {
         string signature;      // ZK or other signature
-        string provider;       // Provider information
-        string username;       // Username of the artist
+        bytes32 username;       // Username of the artist
         address walletAddress; // Wallet address of the artist
         uint256 timestamp;     // Timestamp of the record
     }
@@ -16,18 +24,18 @@ contract ArtistProfile {
     // Function to save artist details
     function saveArtist(
         string memory _signature,
-        string memory _provider,
-        string memory _username,
+        bytes32  _username,
         address _walletAddress,
         uint256 _timestamp
     ) public {
-        require(_walletAddress != address(0), "Invalid wallet address");
-        require(bytes(_username).length > 0, "Username cannot be empty");
+        if(_timestamp == 0) revert invalidInput();
+        if(_walletAddress == address(0x0)) revert invalidInput();
+        if(_username.length == 0) revert invalidUserName();
+        if(bytes(_signature).length == 0) revert invalidInput();
 
         // Save the artist details
         artists[_walletAddress] = Artist({
             signature: _signature,
-            provider: _provider,
             username: _username,
             walletAddress: _walletAddress,
             timestamp: _timestamp
@@ -35,9 +43,9 @@ contract ArtistProfile {
     }
 
     // Function to retrieve artist's username using their wallet address
-    function getArtistUsername(address _walletAddress) public view returns (string memory) {
-        require(_walletAddress != address(0), "Invalid wallet address");
-        require(bytes(artists[_walletAddress].username).length > 0, "Artist not found");
+    function getArtistUsername(address _walletAddress) public view returns (bytes32) {
+        if(_walletAddress == address(0x0)) revert invalidInput();
+        if(artists[_walletAddress].username.length == 0) revert invalidUser();
 
         return artists[_walletAddress].username;
     }
